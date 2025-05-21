@@ -1,0 +1,41 @@
+package templates
+
+templ MainTemplate() {
+	<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
+		<textarea
+			style="width: 60vw; height: 40vh; margin-left: 2vw;"
+			id="yaml"
+			name="yaml"
+			rows="10"
+			cols="60"
+			placeholder="Paste your YAML here..."
+			placeholder="Enter your unencrypted YAML"
+			hx-post="/format-yaml"
+			hx-trigger="change delay:500ms"
+			hx-target="#yaml"
+			hx-swap="outerHTML"
+		></textarea>
+		<br/>
+		<button
+			hx-post="/"
+			hx-include="#yaml"
+			hx-target="#yaml-target"
+			hx-swap="outerHTML"
+			style="height: 3em; margin: 0 2vw;"
+		>encrypt</button>
+		<br/>
+		<textarea id="yaml-target" style="width: 60vw; height: 40vh; margin-left: 2vw;"></textarea>
+	</div>
+}
+
+templ Encrypted(b []byte) {
+	<textarea id="yaml-target" style="width: 60vw; height: 40vh; margin-left: 2vw;">{ string(b) }</textarea>
+}
+
+templ FormattedYaml(b []byte) {
+	<textarea id="yaml" style="width: 60vw; height: 40vh; margin-left: 2vw;" id="yaml" name="yaml" rows="10" cols="60" placeholder="Paste your YAML here...">{ string(b) }</textarea>
+}
+
+templ MainTempl() {
+	@Base(MainTemplate())
+}
