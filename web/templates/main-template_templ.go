@@ -29,7 +29,7 @@ func MainTemplate() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div style=\"display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;\"><textarea style=\"width: 60vw; height: 40vh; margin-left: 2vw;\" id=\"yaml\" name=\"yaml\" rows=\"10\" cols=\"60\" placeholder=\"Paste your YAML here...\" placeholder=\"Enter your unencrypted YAML\" hx-post=\"/format-yaml\" hx-trigger=\"change delay:500ms\" hx-target=\"#yaml\" hx-swap=\"outerHTML\"></textarea><br><button hx-post=\"/\" hx-include=\"#yaml\" hx-target=\"#yaml-target\" hx-swap=\"outerHTML\" style=\"height: 3em; margin: 0 2vw;\">encrypt</button><br><textarea id=\"yaml-target\" style=\"width: 60vw; height: 40vh; margin-left: 2vw;\"></textarea></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div style=\"display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;\"><textarea style=\"width: 60vw; height: 40vh; margin-left: 2vw;\" id=\"yaml\" name=\"yaml\" rows=\"10\" cols=\"60\" placeholder=\"Paste your YAML here...\" placeholder=\"Enter your unencrypted YAML\" hx-post=\"/format-yaml\" hx-trigger=\"change delay:500ms\" hx-target=\"#yaml\" hx-swap=\"outerHTML\"></textarea><br><form><input type=\"text\" id=\"encrypt-key\" name=\"encrypt-key\" placeholder=\"encryption key\"> <button hx-post=\"/\" hx-include=\"#yaml\" hx-target=\"#yaml-target\" hx-swap=\"outerHTML\" style=\"height: 3em; margin: 0 2vw;\">encrypt</button></form><br><textarea id=\"yaml-target\" style=\"width: 60vw; height: 40vh; margin-left: 2vw;\"></textarea></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -58,14 +58,14 @@ func Encrypted(b []byte) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<textarea id=\"yaml-target\" style=\"width: 60vw; height: 40vh; margin-left: 2vw;\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<textarea id=\"yaml-target\" hx-target=\"#yaml\" hx-swap=\"outerHTML\" style=\"width: 60vw; height: 40vh; margin-left: 2vw;\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(string(b))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/main-template.templ`, Line: 32, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/main-template.templ`, Line: 40, Col: 13}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -79,7 +79,7 @@ func Encrypted(b []byte) templ.Component {
 	})
 }
 
-func FormattedYaml(b []byte) templ.Component {
+func FormattedYaml(b []byte, err error) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -100,20 +100,39 @@ func FormattedYaml(b []byte) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<textarea id=\"yaml\" style=\"width: 60vw; height: 40vh; margin-left: 2vw;\" id=\"yaml\" name=\"yaml\" rows=\"10\" cols=\"60\" placeholder=\"Paste your YAML here...\">")
+		if err != nil {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"alert alert-danger\"><strong>Error:</strong> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var5 string
+			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(err.Error())
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/main-template.templ`, Line: 46, Col: 40}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div>return ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<textarea hx-post=\"/format-yaml\" hx-trigger=\"change delay:500ms\" hx-swap=\"outerHTML\" hx-target=\"#yaml\" id=\"yaml\" style=\"width: 60vw; height: 40vh; margin-left: 2vw;\" id=\"yaml\" name=\"yaml\" rows=\"10\" cols=\"60\" placeholder=\"Paste your YAML here...\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var5 string
-		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(string(b))
+		var templ_7745c5c3_Var6 string
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(string(b))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/main-template.templ`, Line: 36, Col: 165}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/main-template.templ`, Line: 63, Col: 13}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</textarea>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</textarea>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -137,9 +156,9 @@ func MainTempl() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var6 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var6 == nil {
-			templ_7745c5c3_Var6 = templ.NopComponent
+		templ_7745c5c3_Var7 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var7 == nil {
+			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = Base(MainTemplate()).Render(ctx, templ_7745c5c3_Buffer)

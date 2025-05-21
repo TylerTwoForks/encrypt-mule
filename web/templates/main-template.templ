@@ -16,24 +16,52 @@ templ MainTemplate() {
 			hx-swap="outerHTML"
 		></textarea>
 		<br/>
-		<button
-			hx-post="/"
-			hx-include="#yaml"
-			hx-target="#yaml-target"
-			hx-swap="outerHTML"
-			style="height: 3em; margin: 0 2vw;"
-		>encrypt</button>
+		<form>
+			<input type="text" id="encrypt-key" name="encrypt-key" placeholder="encryption key"/>
+			<button
+				hx-post="/"
+				hx-include="#yaml"
+				hx-target="#yaml-target"
+				hx-swap="outerHTML"
+				style="height: 3em; margin: 0 2vw;"
+			>encrypt</button>
+		</form>
 		<br/>
 		<textarea id="yaml-target" style="width: 60vw; height: 40vh; margin-left: 2vw;"></textarea>
 	</div>
 }
 
 templ Encrypted(b []byte) {
-	<textarea id="yaml-target" style="width: 60vw; height: 40vh; margin-left: 2vw;">{ string(b) }</textarea>
+	<textarea
+		id="yaml-target"
+		hx-target="#yaml"
+		hx-swap="outerHTML"
+		style="width: 60vw; height: 40vh; margin-left: 2vw;"
+	>{ string(b) }</textarea>
 }
 
-templ FormattedYaml(b []byte) {
-	<textarea id="yaml" style="width: 60vw; height: 40vh; margin-left: 2vw;" id="yaml" name="yaml" rows="10" cols="60" placeholder="Paste your YAML here...">{ string(b) }</textarea>
+templ FormattedYaml(b []byte, err error) {
+	if err != nil {
+		<div class="alert alert-danger">
+			<strong>Error:</strong> { err.Error() }
+		</div>
+		return
+	}
+	<textarea
+		hx-post="/format-yaml"
+		hx-trigger="change delay:500ms"
+		hx-swap="outerHTML"
+		hx-target="#yaml"
+		id="yaml"
+		style="width: 60vw; height: 40vh; margin-left: 2vw;"
+		id="yaml"
+		name="yaml"
+		rows="10"
+		cols="60"
+		placeholder="Paste your YAML here..."
+	>
+		{ string(b) }
+	</textarea>
 }
 
 templ MainTempl() {

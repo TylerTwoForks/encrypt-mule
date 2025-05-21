@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -31,20 +30,17 @@ func main() {
 	})
 
 	e.POST("/", func(c echo.Context) error {
-		e, err := encrypt("ZincMule1", c)
+		e, err := encrypt(c)
 		if err != nil {
-			return err
+			log.Logger.Error().Msgf("Error Encrypting: %v", err)
+			return c.String(http.StatusTeapot, "blarg")
 		}
 		return Render(c, 200, templates.Encrypted(e))
 	})
 
 	e.POST("/format-yaml", func(c echo.Context) error {
-		b, err := formatYAMLHandler(c.FormValue("yaml"))
-		if err != nil {
-			return c.String(http.StatusInternalServerError, "Error updating job")
-		}
-
-		return Render(c, 200, templates.FormattedYaml(b))
+		b, err := formatYAMLHandler(c)
+		return Render(c, 200, templates.FormattedYaml(b, err))
 	})
 
 	if err := e.Start(":1323"); err != nil {
@@ -79,17 +75,37 @@ func quoteValuesOnly(n *yaml.Node) {
 	}
 }
 
-func formatYAMLHandler(input string) ([]byte, error) {
-	var node yaml.Node
-	decoder := yaml.NewDecoder(strings.NewReader(input))
-	if err := decoder.Decode(&node); err != nil {
+func formatYAMLHandler(c echo.Context) ([]byte, error) {
+	input := c.FormValue("yaml")
+
+	// First, decode the YAML into a generic map
+	var data interface{}
+	if err := yaml.Unmarshal([]byte(input), &data); err != nil {
 		return nil, err
 	}
 
-	quoteValuesOnly(&node)
-
+	// Then re-encode it with proper indentation
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	defer encoder.Close()
+
+	if err := encoder.Encode(data); err != nil {
+		return nil, err
+	}
+
+	// Now we need to read that back in to apply our quoting style
+	var node yaml.Node
+	if err := yaml.Unmarshal(buf.Bytes(), &node); err != nil {
+		return nil, err
+	}
+
+	// Apply our quoting style
+	quoteValuesOnly(&node)
+
+	// Final encoding with proper quoting
+	buf.Reset()
+	encoder = yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
 	defer encoder.Close()
 
@@ -135,18 +151,23 @@ func ZerologMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
 	}
 }
 
-func encrypt(key string, c echo.Context) ([]byte, error) {
+func encrypt(c echo.Context) ([]byte, error) {
+
+	ek := c.FormValue("encrypt-key")
+	if ek == "" {
+		return nil, fmt.Errorf("unable to extract [encrypt-key] FormValue")
+	}
 
 	ue, err := unencryptedTmp(c)
 	if err != nil {
-		return nil, c.String(http.StatusInternalServerError, "Error creating unencrytped temp file")
+		return nil, fmt.Errorf("error creating unencrypted temp file: %v", err)
 	}
 	defer os.Remove(ue.Name())
 	defer ue.Close()
 
 	e, err := encryptedTmp()
 	if err != nil {
-		return nil, c.String(http.StatusInternalServerError, "Error creating encrypted temp file")
+		return nil, fmt.Errorf("error creating encrypted temp file %v", err)
 	}
 	defer os.Remove(e.Name())
 	defer e.Close()
@@ -160,7 +181,7 @@ func encrypt(key string, c echo.Context) ([]byte, error) {
 		"-cp", jarPath,
 		mainClass,
 		"file", "encrypt", "Blowfish", "CBC",
-		key,
+		ek,
 		ue.Name(), //unencrypted temp file
 		e.Name(),  //encrypted temp file
 	}
@@ -173,12 +194,12 @@ func encrypt(key string, c echo.Context) ([]byte, error) {
 
 	// Run the command
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running SecurePropertiesTool: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error running SecurePropertiesTool: %v\n", err)
 		os.Exit(1)
 	}
 	data, err := os.ReadFile(e.Name())
 	if err != nil {
-		return nil, c.String(http.StatusInternalServerError, "Error reading encrypted.properties")
+		return nil, fmt.Errorf("error reading encrypted.properties: %v", err)
 	}
 	return data, err
 }
@@ -199,7 +220,7 @@ func unencryptedTmp(c echo.Context) (*os.File, error) {
 	}
 	yaml := c.FormValue("yaml")
 	if _, err := ue.WriteString(yaml); err != nil {
-		return nil, c.String(http.StatusInternalServerError, "Error writing to temp file")
+		return nil, err
 	}
 
 	return ue, err
