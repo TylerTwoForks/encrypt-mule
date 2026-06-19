@@ -1,67 +1,56 @@
 package templates
 
-templ MainTemplate() {
-	<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
-		<textarea
-			style="width: 60vw; height: 40vh; margin-left: 2vw;"
-			id="yaml"
-			name="yaml"
-			rows="10"
-			cols="60"
-			placeholder="Paste your YAML here..."
-			placeholder="Enter your unencrypted YAML"
-			hx-post="/format-yaml"
-			hx-trigger="change delay:500ms"
-			hx-target="#yaml"
-			hx-swap="outerHTML"
-		></textarea>
-		<br/>
-		<form>
-			<input type="text" id="encrypt-key" name="encrypt-key" placeholder="encryption key"/>
-			<button
-				hx-post="/"
-				hx-include="#yaml"
-				hx-target="#yaml-target"
-				hx-swap="outerHTML"
-				style="height: 3em; margin: 0 2vw;"
-			>encrypt</button>
-		</form>
-		<br/>
-		<textarea id="yaml-target" style="width: 60vw; height: 40vh; margin-left: 2vw;"></textarea>
-	</div>
-}
-
-templ Encrypted(b []byte) {
+// TopTextarea is the plaintext input box. Put YAML here and convert to encrypt.
+templ TopTextarea(content string) {
 	<textarea
-		id="yaml-target"
-		hx-target="#yaml"
-		hx-swap="outerHTML"
-		style="width: 60vw; height: 40vh; margin-left: 2vw;"
-	>{ string(b) }</textarea>
-}
-
-templ FormattedYaml(b []byte, err error) {
-	if err != nil {
-		<div class="alert alert-danger">
-			<strong>Error:</strong> { err.Error() }
-		</div>
-		return
-	}
-	<textarea
-		hx-post="/format-yaml"
-		hx-trigger="change delay:500ms"
-		hx-swap="outerHTML"
-		hx-target="#yaml"
-		id="yaml"
 		style="width: 60vw; height: 40vh; margin-left: 2vw;"
 		id="yaml"
 		name="yaml"
 		rows="10"
 		cols="60"
-		placeholder="Paste your YAML here..."
-	>
-		{ string(b) }
-	</textarea>
+		placeholder="Paste YAML here to encrypt..."
+		hx-post="/format-yaml"
+		hx-trigger="change delay:500ms"
+		hx-target="#yaml"
+		hx-swap="outerHTML"
+	>{ content }</textarea>
+}
+
+// BottomTextarea is the ciphertext box. Put encrypted YAML here and convert to decrypt.
+templ BottomTextarea(content string) {
+	<textarea
+		id="yaml-target"
+		name="encrypted"
+		rows="10"
+		cols="60"
+		placeholder="Paste encrypted YAML here to decrypt..."
+		style="width: 60vw; height: 40vh; margin-left: 2vw;"
+	>{ content }</textarea>
+}
+
+templ MainTemplate() {
+	<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
+		@TopTextarea("")
+		<br/>
+		<form>
+			<input type="text" id="encrypt-key" name="encrypt-key" placeholder="encryption key"/>
+			<button
+				hx-post="/"
+				hx-include="#yaml, #yaml-target, #encrypt-key"
+				hx-target="#yaml-target"
+				hx-swap="outerHTML"
+				style="height: 3em; margin: 0 2vw;"
+			>convert</button>
+		</form>
+		<br/>
+		@BottomTextarea("")
+	</div>
+}
+
+templ ConvertError(err error) {
+	<div class="alert alert-danger" style="color: red;">
+		<strong>Error:</strong> { err.Error() }
+	</div>
 }
 
 templ MainTempl() {

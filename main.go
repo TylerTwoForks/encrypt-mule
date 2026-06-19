@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -29,18 +31,14 @@ func main() {
 		return Render(c, 200, templates.MainTempl())
 	})
 
-	e.POST("/", func(c echo.Context) error {
-		e, err := encrypt(c)
-		if err != nil {
-			log.Logger.Error().Msgf("Error Encrypting: %v", err)
-			return c.String(http.StatusTeapot, "blarg")
-		}
-		return Render(c, 200, templates.Encrypted(e))
-	})
+	e.POST("/", convert)
 
 	e.POST("/format-yaml", func(c echo.Context) error {
 		b, err := formatYAMLHandler(c)
-		return Render(c, 200, templates.FormattedYaml(b, err))
+		if err != nil {
+			return Render(c, 200, templates.ConvertError(err))
+		}
+		return Render(c, 200, templates.TopTextarea(string(b)))
 	})
 
 	if err := e.Start(":1323"); err != nil {
@@ -151,77 +149,102 @@ func ZerologMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
 	}
 }
 
-func encrypt(c echo.Context) ([]byte, error) {
+// convert picks the direction based on which box has content: text in the top
+// (plaintext) box encrypts into the bottom box; text in only the bottom
+// (ciphertext) box decrypts into the top box. The top box wins if both are
+// filled. htmx's HX-Retarget header steers the result to the opposite box.
+func convert(c echo.Context) error {
+	top := c.FormValue("yaml")
+	bottom := c.FormValue("encrypted")
 
-	ek := c.FormValue("encrypt-key")
-	if ek == "" {
+	switch {
+	case strings.TrimSpace(top) != "":
+		out, err := runTool(c, "encrypt", top)
+		if err != nil {
+			log.Logger.Error().Msgf("error encrypting: %v", err)
+			return Render(c, http.StatusOK, templates.ConvertError(err))
+		}
+		c.Response().Header().Set("HX-Retarget", "#yaml-target")
+		return Render(c, http.StatusOK, templates.BottomTextarea(string(out)))
+
+	case strings.TrimSpace(bottom) != "":
+		out, err := runTool(c, "decrypt", bottom)
+		if err != nil {
+			log.Logger.Error().Msgf("error decrypting: %v", err)
+			return Render(c, http.StatusOK, templates.ConvertError(err))
+		}
+		c.Response().Header().Set("HX-Retarget", "#yaml")
+		return Render(c, http.StatusOK, templates.TopTextarea(string(out)))
+
+	default:
+		return Render(c, http.StatusOK, templates.ConvertError(
+			fmt.Errorf("enter YAML in the top box to encrypt, or the bottom box to decrypt")))
+	}
+}
+
+// runTool shells out to the Mule SecurePropertiesTool to encrypt or decrypt the
+// given input and returns the result. op is "encrypt" or "decrypt".
+func runTool(c echo.Context, op, input string) ([]byte, error) {
+	key := c.FormValue("encrypt-key")
+	if key == "" {
 		return nil, fmt.Errorf("unable to extract [encrypt-key] FormValue")
 	}
 
-	ue, err := unencryptedTmp(c)
+	in, err := tmpFile(input)
 	if err != nil {
-		return nil, fmt.Errorf("error creating unencrypted temp file: %v", err)
+		return nil, fmt.Errorf("error creating input temp file: %v", err)
 	}
-	defer os.Remove(ue.Name())
-	defer ue.Close()
+	defer os.Remove(in.Name())
+	defer in.Close()
 
-	e, err := encryptedTmp()
+	out, err := tmpFile("")
 	if err != nil {
-		return nil, fmt.Errorf("error creating encrypted temp file %v", err)
+		return nil, fmt.Errorf("error creating output temp file: %v", err)
 	}
-	defer os.Remove(e.Name())
-	defer e.Close()
+	defer os.Remove(out.Name())
+	defer out.Close()
 
-	// Java classpath and main class
 	jarPath := "./static/secure-properties-tool.jar"
 	mainClass := "com.mulesoft.tools.SecurePropertiesTool"
 
-	// Command arguments
 	args := []string{
 		"-cp", jarPath,
 		mainClass,
-		"file", "encrypt", "Blowfish", "CBC",
-		ek,
-		ue.Name(), //unencrypted temp file
-		e.Name(),  //encrypted temp file
+		"file", op, "Blowfish", "CBC",
+		key,
+		in.Name(),  // input temp file
+		out.Name(), // output temp file
 	}
 
 	cmd := exec.Command("java", args...)
 
-	// Pipe output to terminal
+	var stderr bytes.Buffer
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 
-	// Run the command
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error running SecurePropertiesTool: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("error running SecurePropertiesTool (%s): %v: %s", op, err, stderr.String())
 	}
-	data, err := os.ReadFile(e.Name())
+
+	data, err := os.ReadFile(out.Name())
 	if err != nil {
-		return nil, fmt.Errorf("error reading encrypted.properties: %v", err)
+		return nil, fmt.Errorf("error reading %s output: %v", op, err)
 	}
-	return data, err
+	return data, nil
 }
 
-func encryptedTmp() (*os.File, error) {
-	e, err := os.CreateTemp("./tmp", "encrypted-*.yaml")
+// tmpFile creates a temp file under ./tmp, writing contents if non-empty.
+func tmpFile(contents string) (*os.File, error) {
+	f, err := os.CreateTemp("./tmp", "convert-*.yaml")
 	if err != nil {
 		return nil, err
 	}
-
-	return e, nil
-}
-
-func unencryptedTmp(c echo.Context) (*os.File, error) {
-	ue, err := os.CreateTemp("./tmp", "unencrypted-*.yaml")
-	if err != nil {
-		return nil, err
+	if contents != "" {
+		if _, err := f.WriteString(contents); err != nil {
+			f.Close()
+			os.Remove(f.Name())
+			return nil, err
+		}
 	}
-	yaml := c.FormValue("yaml")
-	if _, err := ue.WriteString(yaml); err != nil {
-		return nil, err
-	}
-
-	return ue, err
+	return f, nil
 }
