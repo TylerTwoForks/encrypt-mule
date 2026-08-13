@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,7 +25,33 @@ import (
 
 var logger zerolog.Logger
 
+// Build info, injected at release time via -ldflags -X.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+//go:embed static/secure-properties-tool.jar
+var securePropertiesJar []byte
+
+// jarPath is the on-disk location of the embedded jar, resolved at startup.
+var jarPath string
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version information and exit")
+	flag.Parse()
+	if *showVersion {
+		fmt.Printf("encrypt %s (commit %s, built %s)\n", version, commit, date)
+		return
+	}
+
+	p, err := extractJar()
+	if err != nil {
+		log.Logger.Fatal().Msgf("error extracting embedded jar: %v", err)
+	}
+	jarPath = p
+
 	e := echo.New()
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
@@ -41,9 +71,45 @@ func main() {
 		return Render(c, 200, templates.TopTextarea(string(b)))
 	})
 
+	// Open the app in the user's default browser shortly after the server
+	// comes up, so double-clicking the binary lands them on the UI.
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		openBrowser("http://localhost:1323")
+	}()
+
 	if err := e.Start(":1323"); err != nil {
 		log.Logger.Error().Msgf("Error starting server: %v", err)
 	}
+}
+
+// extractJar writes the embedded SecurePropertiesTool jar to a stable temp
+// location and returns its path, so the binary is self-contained.
+func extractJar() (string, error) {
+	dir := filepath.Join(os.TempDir(), "encrypt-mule")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	p := filepath.Join(dir, "secure-properties-tool.jar")
+	if err := os.WriteFile(p, securePropertiesJar, 0o644); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+// openBrowser opens url in the user's default browser. Best-effort: errors are
+// ignored so a headless/server run still works.
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default: // linux, etc.
+		cmd = exec.Command("xdg-open", url)
+	}
+	_ = cmd.Start()
 }
 
 // Only apply double quotes to string values, not keys
@@ -204,7 +270,6 @@ func runTool(c echo.Context, op, input string) ([]byte, error) {
 	defer os.Remove(out.Name())
 	defer out.Close()
 
-	jarPath := "./static/secure-properties-tool.jar"
 	mainClass := "com.mulesoft.tools.SecurePropertiesTool"
 
 	args := []string{
@@ -233,9 +298,9 @@ func runTool(c echo.Context, op, input string) ([]byte, error) {
 	return data, nil
 }
 
-// tmpFile creates a temp file under ./tmp, writing contents if non-empty.
+// tmpFile creates a temp file in the OS temp dir, writing contents if non-empty.
 func tmpFile(contents string) (*os.File, error) {
-	f, err := os.CreateTemp("./tmp", "convert-*.yaml")
+	f, err := os.CreateTemp("", "convert-*.yaml")
 	if err != nil {
 		return nil, err
 	}
